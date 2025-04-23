@@ -11,10 +11,12 @@ A Python package for annotating text using LLMs (OpenAI & DeepSeek), extracting 
 - **CLI**: Simple commands: `annotate` and `evaluate`.
 
 ## Installation
-```bash
-# Install from PyPI
-pip install llm-classifier
 
+
+# Install from PyPI
+```bash
+pip install llm-classifier
+```
 
 ### Local development
 ```bash
