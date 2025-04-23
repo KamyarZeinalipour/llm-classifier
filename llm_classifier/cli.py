@@ -4,35 +4,39 @@ from llm_classifier import Annotator, Parser, Evaluator
 
 
 def main():
-    ap = argparse.ArgumentParser(prog='llm-classifier')
-    subs = ap.add_subparsers(dest='cmd', required=True)
+    parser = argparse.ArgumentParser(prog='llm-classifier')
+    subparsers = parser.add_subparsers(dest='command', required=True)
 
-    a = subs.add_parser('annotate')
-    a.add_argument('-i','--input', required=True)
-    a.add_argument('-o','--output', default='results')
-    a.add_argument('-m','--models', nargs='+', required=True)
-    a.add_argument('--openai-key', required=True)
-    a.add_argument('--deepseek-key')
-    a.add_argument('--system-message')
-    a.add_argument('--prompt-template')
+    # Annotate command
+    ann = subparsers.add_parser('annotate', help='Run annotation')
+    ann.add_argument('-i', '--input', required=True, help='Input CSV path')
+    ann.add_argument('-o', '--output', default='results', help='Output directory')
+    ann.add_argument('-m', '--models', nargs='+', required=True, help='List of model names')
+    ann.add_argument('--openai-key', required=True, help='OpenAI API key')
+    ann.add_argument('--deepseek-key', help='DeepSeek API key (optional)')
+    ann.add_argument('--system-message', help='Path to system message file')
+    ann.add_argument('--prompt-template', help='Path to prompt template file')
+    ann.add_argument('--prompt-columns', nargs='+', help='CSV column names to inject into prompt')
 
-    e = subs.add_parser('evaluate')
-    e.add_argument('-p','--predictions', required=True)
-    e.add_argument('-g','--ground-truth', required=True)
+    # Evaluate command
+    ev = subparsers.add_parser('evaluate', help='Compute evaluation metrics')
+    ev.add_argument('-p', '--predictions', required=True, help='Predictions CSV path')
+    ev.add_argument('-g', '--ground-truth', required=True, help='Ground truth CSV path')
 
-    args = ap.parse_args()
-    if args.cmd == 'annotate':
-        ann = Annotator(
+    args = parser.parse_args()
+    if args.command == 'annotate':
+        annotator = Annotator(
             openai_api_key=args.openai_key,
             deepseek_api_key=args.deepseek_key,
             models=args.models,
             system_message_path=args.system_message,
-            prompt_template_path=args.prompt_template
+            prompt_template_path=args.prompt_template,
+            prompt_columns=args.prompt_columns,
         )
-        ann.run(args.input, args.output)
+        annotator.run(args.input, args.output)
     else:
-        pr = Parser()
-        dfp = pr.parse_csv(args.predictions)
-        ev = Evaluator()
-        print(ev.evaluate(dfp, args.ground_truth))
+        parser_ = Parser()
+        df_pred = parser_.parse_csv(args.predictions)
+        evaluator = Evaluator()
+        print(evaluator.evaluate(df_pred, args.ground_truth))
         sys.exit(0)
