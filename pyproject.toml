@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-classifier"
+version = "0.1.0"
+description = "LLM-based annotation, parsing, and evaluation toolkit"
+authors = [{ name = "Kamyar Zeinalipour", email = "kamyar.zeinalipour2@unisi.it" }]
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+
+[project.dependencies]
+pandas = "^1.5"
+openai = "^0.27"
+scikit-learn = "^1.2"
+matplotlib = "^3.6"
+
+[project.optional-dependencies]
+deepseek = ["openai>=0.27"]  # using same OpenAI SDK with base_url override
+
+[project.entry-points]
+console_scripts = [
+  "llm-classifier = llm_classifier.cli:main"
+]
