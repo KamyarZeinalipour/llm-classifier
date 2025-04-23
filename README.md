@@ -1,4 +1,4 @@
-```markdown
+
 # llm-classifier
 A Python package for annotating text using LLMs (OpenAI & DeepSeek), extracting JSON outputs, evaluating performance (including Jaccard for multi-label), and plotting results—all in an object-oriented, reusable way.
 
@@ -14,7 +14,7 @@ A Python package for annotating text using LLMs (OpenAI & DeepSeek), extracting 
 ```bash
 # Install from PyPI
 pip install llm-classifier
-```
+
 
 ### Local development
 ```bash
