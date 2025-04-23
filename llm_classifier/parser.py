@@ -3,14 +3,18 @@ import json
 import pandas as pd
 
 class Parser:
-    """Extract JSON from model outputs and normalize to DataFrame."""
+    """Extract JSON objects from LLM outputs and normalize to a DataFrame."""
     @staticmethod
     def extract_json(cell: str) -> dict | None:
-        if not isinstance(cell, str): return None
+        if not isinstance(cell, str):
+            return None
         m = re.search(r"\{.*\}", cell, re.DOTALL)
-        if not m: return None
-        try: return json.loads(m.group())
-        except json.JSONDecodeError: return None
+        if not m:
+            return None
+        try:
+            return json.loads(m.group())
+        except json.JSONDecodeError:
+            return None
 
     def parse_csv(self, csv_path: str) -> pd.DataFrame:
         df = pd.read_csv(csv_path)
