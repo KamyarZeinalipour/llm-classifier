@@ -1,72 +1,176 @@
-import re
-import pandas as pd
+"""
+Multi-label evaluator for llm-classifier with handy debug output.
+
+Usage
+-----
+from llm_classifier.evaluator import Evaluator
+
+ev = Evaluator()
+metrics_df, debug_df = ev.evaluate(
+        df_pred,
+        ground_truth_path="data/df_cleanv3.csv",
+        return_debug=True,
+)
+
+# ➊ metrics_df – one row per label column with exact-match, Jaccard, micro P/R/F1
+# ➋ debug_df   – one row per data sample & label column so you can inspect errors:
+print(debug_df.query("relation_correct == False").head())
+"""
+from __future__ import annotations
+
+import re, ast
+from typing import Tuple, Dict, List
+
 import numpy as np
+import pandas as pd
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
     recall_score,
     f1_score,
     jaccard_score,
-    classification_report
+    classification_report,
 )
 from sklearn.preprocessing import MultiLabelBinarizer
 
+
 class Evaluator:
-    """Compute multi-label metrics: exact-match, Jaccard, micro precision/recall/F1."""
+    """Compute multilabel metrics and (optionally) row-level debug info."""
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Helpers
+    # ──────────────────────────────────────────────────────────────────────
     @staticmethod
-    def _ensure_list(x) -> list[str]:
-        # If x is already a list or numpy array, convert to list
-        if isinstance(x, (list, np.ndarray)):
-            return list(x)
-        # If it's a string, split on commas/semicolons
-        if isinstance(x, str):
-            return [p.strip() for p in re.split(r"[,;]", x) if p.strip()]
-        # If it's NaN or None
+    def _ensure_list(x) -> List[str]:
+        """
+        Normalise *anything* into a list of strings.
+
+        Handles:
+        1.  list / tuple / ndarray                → list(str)
+        2.  stringified Python list "['a','b']"   → ['a', 'b']
+        3.  plain string "a, b; c"                → ['a', 'b', 'c']
+        4.  NaN / None                            → []
+        """
+        # 1️⃣ already iterable
+        if isinstance(x, (list, tuple, np.ndarray)):
+            return [str(i).strip() for i in x]
+
+        # 4️⃣ NaN / None
         if pd.isna(x):
             return []
-        # Fallback: single-element list
-        return [str(x)]
 
-    def evaluate(self, df: pd.DataFrame, ground_truth_path: str) -> pd.DataFrame:
+        # 2️⃣ or 3️⃣ – string input
+        if isinstance(x, str):
+            s = x.strip()
+            # looks like "[...]" → try literal-eval first
+            if s.startswith("[") and s.endswith("]"):
+                try:
+                    val = ast.literal_eval(s)
+                    if isinstance(val, (list, tuple, np.ndarray)):
+                        return [str(i).strip() for i in val]
+                except Exception:
+                    pass  # fall through to generic splitter
+
+            # generic comma/semicolon splitter
+            return [p.strip(" []'\"") for p in re.split(r"[;,]", s) if p.strip()]
+
+        # fallback: single element
+        return [str(x).strip()]
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Public API
+    # ──────────────────────────────────────────────────────────────────────
+    def evaluate(
+        self,
+        df_pred: pd.DataFrame,
+        ground_truth_path: str | pd.DataFrame,
+        *,
+        return_debug: bool = False,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame] | pd.DataFrame:
         """
-        Reads ground truth CSV and predicted DataFrame, computes metrics per column.
+        Parameters
+        ----------
+        df_pred : DataFrame
+            Must contain columns named "<label>_predict".
+        ground_truth_path : str | DataFrame
+            CSV path or already-loaded ground-truth dataframe.
+        return_debug : bool, default False
+            If True, also return a per-row debug dataframe.
+
+        Returns
+        -------
+        metrics_df  or  (metrics_df, debug_df)
         """
-        gt = pd.read_csv(ground_truth_path)
-        results = {}
+        # Load ground truth
+        gt = (
+            ground_truth_path
+            if isinstance(ground_truth_path, pd.DataFrame)
+            else pd.read_csv(ground_truth_path)
+        ).copy()
+
+        metrics: Dict[str, Dict[str, float | str]] = {}
+        debug_rows: List[dict] = []
 
         for col in gt.columns:
             pred_col = f"{col}_predict"
-            if pred_col not in df:
-                continue
+            if pred_col not in df_pred:
+                continue  # silently skip missing prediction columns
 
-            # Build true/predicted label lists
-            y_true = gt[col].apply(self._ensure_list)
-            y_pred = df[pred_col].apply(self._ensure_list)
+            # ---- clean to list-of-labels ---------------------------------
+            y_true_lists = gt[col].apply(self._ensure_list)
+            y_pred_lists = df_pred[pred_col].apply(self._ensure_list)
 
-            # Fit multilabel binarizer
-            all_labels = sorted(set(sum(y_true.tolist() + y_pred.tolist(), [])))
-            mlb = MultiLabelBinarizer(classes=all_labels)
-            Y_true = mlb.fit_transform(y_true)
-            Y_pred = mlb.transform(y_pred)
+            # ---- binarise -------------------------------------------------
+            label_space = sorted(
+                set(sum(y_true_lists.tolist() + y_pred_lists.tolist(), []))
+            )
+            mlb = MultiLabelBinarizer(classes=label_space)
+            Y_true = mlb.fit_transform(y_true_lists)
+            Y_pred = mlb.transform(y_pred_lists)
 
-            # Compute metrics
-            exact_acc = accuracy_score(Y_true, Y_pred)
-            try:
-                jacc = jaccard_score(Y_true, Y_pred, average='samples', zero_division=0)
-            except ValueError:
-                jacc = None
-            prec = precision_score(Y_true, Y_pred, average='micro', zero_division=0)
-            rec = recall_score(Y_true, Y_pred, average='micro', zero_division=0)
-            f1 = f1_score(Y_true, Y_pred, average='micro', zero_division=0)
-            report = classification_report(Y_true, Y_pred, target_names=mlb.classes_, zero_division=0)
-
-            results[col] = {
-                'exact_match_accuracy': exact_acc,
-                'jaccard_score': jacc,
-                'precision_micro': prec,
-                'recall_micro': rec,
-                'f1_micro': f1,
-                'classification_report': report,
+            # ---- metrics --------------------------------------------------
+            metrics[col] = {
+                "exact_match_accuracy": accuracy_score(Y_true, Y_pred),
+                "jaccard_score": jaccard_score(
+                    Y_true, Y_pred, average="samples", zero_division=0
+                ),
+                "precision_micro": precision_score(
+                    Y_true, Y_pred, average="micro", zero_division=0
+                ),
+                "recall_micro": recall_score(
+                    Y_true, Y_pred, average="micro", zero_division=0
+                ),
+                "f1_micro": f1_score(
+                    Y_true, Y_pred, average="micro", zero_division=0
+                ),
+                "classification_report": classification_report(
+                    Y_true, Y_pred, target_names=mlb.classes_, zero_division=0
+                ),
             }
 
-        return pd.DataFrame(results).T
+            # ---- per-row debug info --------------------------------------
+            if return_debug:
+                for idx, (yt, yp) in enumerate(zip(y_true_lists, y_pred_lists)):
+                    debug_rows.append(
+                        {
+                            "row_id": idx,
+                            "label_col": col,
+                            f"{col}_true": ", ".join(yt),
+                            f"{col}_pred": ", ".join(yp),
+                            f"{col}_correct": set(yt) == set(yp),
+                            "jaccard": (
+                                len(set(yt).intersection(yp))
+                                / len(set(yt).union(yp))
+                                if yt or yp
+                                else 1.0
+                            ),
+                        }
+                    )
+
+        metrics_df = pd.DataFrame(metrics).T
+
+        if return_debug:
+            debug_df = pd.DataFrame(debug_rows)
+            return metrics_df, debug_df
+
+        return metrics_df
