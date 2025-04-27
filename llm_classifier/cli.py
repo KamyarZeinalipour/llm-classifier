@@ -17,6 +17,7 @@ def main():
     ann.add_argument('--system-message', help='Path to system message file')
     ann.add_argument('--prompt-template', help='Path to prompt template file')
     ann.add_argument('--prompt-columns', nargs='+', help='CSV column names to inject into prompt')
+    ann.add_argument('-d', '--debug', action='store_true', help='Print model name and a sample filled-in prompt for each model')
 
     # Evaluate command
     ev = subparsers.add_parser('evaluate', help='Compute evaluation metrics')
@@ -32,6 +33,7 @@ def main():
             system_message_path=args.system_message,
             prompt_template_path=args.prompt_template,
             prompt_columns=args.prompt_columns,
+            debug=args.debug,
         )
         annotator.run(args.input, args.output)
     else:
