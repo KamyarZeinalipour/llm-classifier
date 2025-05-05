@@ -42,40 +42,41 @@ class Evaluator:
     # ──────────────────────────────────────────────────────────────────────
     @staticmethod
     def _ensure_list(x) -> List[str]:
-        """
-        Normalise *anything* into a list of strings.
+            """
+            Normalise *anything* into a list of lowercased strings.
+        
+            Handles:
+            1.  list / tuple / ndarray                → list(str.lower)
+            2.  stringified Python list "['a','b']"   → ['a', 'b']
+            3.  plain string "a, b; c"                → ['a', 'b', 'c']
+            4.  NaN / None                            → []
+            """
+            # 1️⃣ already iterable
+            if isinstance(x, (list, tuple, np.ndarray)):
+                return [str(i).strip().lower() for i in x]
+        
+            # 4️⃣ NaN / None
+            if pd.isna(x):
+                return []
+        
+            # 2️⃣ or 3️⃣ – string input
+            if isinstance(x, str):
+                s = x.strip()
+                # looks like "[...]" → try literal-eval first
+                if s.startswith("[") and s.endswith("]"):
+                    try:
+                        val = ast.literal_eval(s)
+                        if isinstance(val, (list, tuple, np.ndarray)):
+                            return [str(i).strip().lower() for i in val]
+                    except Exception:
+                        pass  # fall through to generic splitter
+        
+                # generic comma/semicolon splitter
+                return [p.strip(" []'\"").lower() for p in re.split(r"[;,]", s) if p.strip()]
+        
+            # fallback: single element
+            return [str(x).strip().lower()]
 
-        Handles:
-        1.  list / tuple / ndarray                → list(str)
-        2.  stringified Python list "['a','b']"   → ['a', 'b']
-        3.  plain string "a, b; c"                → ['a', 'b', 'c']
-        4.  NaN / None                            → []
-        """
-        # 1️⃣ already iterable
-        if isinstance(x, (list, tuple, np.ndarray)):
-            return [str(i).strip() for i in x]
-
-        # 4️⃣ NaN / None
-        if pd.isna(x):
-            return []
-
-        # 2️⃣ or 3️⃣ – string input
-        if isinstance(x, str):
-            s = x.strip()
-            # looks like "[...]" → try literal-eval first
-            if s.startswith("[") and s.endswith("]"):
-                try:
-                    val = ast.literal_eval(s)
-                    if isinstance(val, (list, tuple, np.ndarray)):
-                        return [str(i).strip() for i in val]
-                except Exception:
-                    pass  # fall through to generic splitter
-
-            # generic comma/semicolon splitter
-            return [p.strip(" []'\"") for p in re.split(r"[;,]", s) if p.strip()]
-
-        # fallback: single element
-        return [str(x).strip()]
 
     # ──────────────────────────────────────────────────────────────────────
     # Public API
